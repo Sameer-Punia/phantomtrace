@@ -6,17 +6,20 @@ from forensic_engine import analyze_email
 
 app = FastAPI(title="PhantomTrace Forensic Engine", version="1.0.0")
 
-# Compute base project root directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Configure directories for local vs Vercel serverless environments
+# Vercel serverless filesystem fix:
+# All dynamic folders MUST live in /tmp. Local development can still use project folders.
+IS_VERCEL = os.environ.get("VERCEL") == "1" or os.path.exists("/var/task")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-REPORTS_DIR = "/tmp/reports" if os.environ.get("VERCEL") else os.path.join(BASE_DIR, "reports")
+REPORTS_DIR = "/tmp/reports" if IS_VERCEL else os.path.join(BASE_DIR, "reports")
 
-os.makedirs(STATIC_DIR, exist_ok=True)
+# Only create folders where the runtime allows writes
 os.makedirs(REPORTS_DIR, exist_ok=True)
+if not IS_VERCEL:
+    os.makedirs(STATIC_DIR, exist_ok=True)
 
-# Mount static and dynamic report assets
+# Mount endpoints
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
