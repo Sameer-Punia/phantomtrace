@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+fpdf2
+boto3
+dnspython
+checkdmarc
+geoip2
+python-multipart

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PHANTOMTRACE // DFIR Analysis Platform</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header class="navbar">
+    <div class="brand">
+      <span class="brand-title">PHANTOMTRACE</span>
+    </div>
+    <div class="nav-center">
+      <!-- Fixed Navigation Links -->
+      <nav class="nav-links">
+        <a href="javascript:void(0);" class="nav-tab active" onclick="switchTab('view-analysis', this)">Analysis</a>
+        <a href="javascript:void(0);" class="nav-tab" onclick="switchTab('view-evidence', this)">Evidence Vault</a>
+        <a href="javascript:void(0);" class="nav-tab" onclick="switchTab('view-intel', this)">Threat Intel</a>
+        <a href="javascript:void(0);" class="nav-tab" onclick="switchTab('view-reports', this)">Reports</a>
+      </nav>
+    </div>
+    <div class="nav-right">
+      <span class="engine-status">
+        ENGINE STATUS: 
+        <span class="status-dot"></span>Parser 
+        <span class="status-dot"></span>DNS 
+        <span class="status-dot"></span>GeoIP 
+        <span class="status-dot"></span>AI
+      </span>
+      <button class="btn-primary" onclick="document.getElementById('emlUpload').click()">
+        New Analysis
+      </button>
+      <input type="file" id="emlUpload" accept=".eml" onchange="fileSelected()" style="display: none;" />
+    </div>
+  </header>
+
+  <main class="dashboard-container">
+    
+    <!-- ==================== ANALYSIS TAB ==================== -->
+    <div id="view-analysis" class="tab-view">
+      
+      <!-- State A: Empty / Ingestion (Hidden when artifact loaded) -->
+      <div id="stateEmpty" class="ingestion-state">
+        <div class="drop-zone" onclick="document.getElementById('emlUpload').click()">
+          <i class="fa-solid fa-file-arrow-up drop-icon"></i>
+          <h2>DROP EMAIL ARTIFACT</h2>
+          <p>Drag & drop .eml file here or browse</p>
+        </div>
+        <p class="ingestion-desc">PhantomTrace extracts authentication, routing, sender identity, network infrastructure, and evidence-integrity metadata.</p>
+        
+        <div class="module-cards">
+          <div class="module-card">SPF / DKIM / DMARC</div>
+          <div class="module-card">Header Analysis</div>
+          <div class="module-card">DNS / GeoIP</div>
+          <div class="module-card">Threat Intel</div>
+        </div>
+      </div>
+
+      <!-- State B: Analyzed Dashboard (Hidden initially) -->
+      <div id="stateAnalyzed" class="analyzed-state hidden">
+        
+        <!-- Top Summary -->
+        <section class="panel threat-banner">
+          <div class="threat-score-col">
+            <div class="score-value" id="threatScoreVal">--</div>
+            <div class="score-label" id="threatLevelLbl">THREAT SCORE</div>
+          </div>
+          <div class="threat-details-col">
+            <div class="artifact-meta">
+              <span class="meta-item">Artifact: <code id="metaFilename">--</code></span>
+              <span class="meta-item">Time: <code id="metaTimestamp">--</code></span>
+              <span class="meta-item">SHA-256: <code id="metaSha">--</code></span>
+              <span class="meta-item">Status: <span class="status-tag">ANALYSIS COMPLETE</span></span>
+            </div>
+            <div class="threat-factors">
+              <h4>Why this score?</h4>
+              <div class="factors-list" id="factorsList"></div>
+            </div>
+          </div>
+          <div class="banner-actions">
+            <button class="btn-action" id="btnExportReport" onclick="downloadCertificate()">Export Forensic Report</button>
+            <button class="btn-action" id="btnExportJson" onclick="exportJson()">Export JSON</button>
+          </div>
+        </section>
+
+        <!-- Row 2: Auth & Origin -->
+        <div class="grid-two-col mt-16">
+          <div class="panel">
+            <div class="panel-header">SENDER IDENTITY & AUTHENTICATION</div>
+            <div class="panel-body">
+              <div class="identity-grid">
+                <div class="id-row">
+                  <span class="id-label">From:</span>
+                  <span class="id-val mono" id="valFrom">--</span>
+                </div>
+                <div class="id-row">
+                  <span class="id-label">Return-Path:</span>
+                  <span class="id-val mono" id="valReturnPath">--</span>
+                </div>
+                <div class="id-row">
+                  <span class="id-label">Alignment:</span>
+                  <span class="id-val" id="valAlignment">--</span>
+                </div>
+              </div>
+
+              <h4 class="section-title mt-16">Authentication Status</h4>
+              <div class="auth-status-grid">
+                <div class="auth-item" id="authSpf">
+                  <div class="auth-name">SPF</div>
+                  <div class="auth-result" id="resSpf">--</div>
+                </div>
+                <div class="auth-item" id="authDkim">
+                  <div class="auth-name">DKIM</div>
+                  <div class="auth-result" id="resDkim">--</div>
+                </div>
+                <div class="auth-item" id="authDmarc">
+                  <div class="auth-name">DMARC</div>
+                  <div class="auth-result" id="resDmarc">--</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">NETWORK ORIGIN & TRAVERSAL</div>
+            <div class="panel-body p-0">
+               <div class="network-meta p-16">
+                  <div class="net-row"><span class="net-label">Origin IP:</span> <code id="netOriginIp">--</code></div>
+                  <div class="net-row"><span class="net-label">Location:</span> <span id="netLocation">--</span></div>
+                  <div class="net-row"><span class="net-label">Reverse DNS:</span> <code id="netPtr">--</code></div>
+               </div>
+               <div id="map" class="compact-map"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Threat Indicators & AI Synthesis -->
+        <div class="grid-two-col mt-16">
+          <div class="panel">
+            <div class="panel-header">THREAT INDICATORS</div>
+            <div class="panel-body p-0">
+              <div id="threatIndicatorsEmpty" class="empty-state p-16">Awaiting artifact analysis</div>
+              <div id="threatIndicatorsContent" class="hidden p-16">
+                
+                <div class="indicator-card">
+                  <div class="ind-header">
+                    <span class="ind-title">DOMAIN RISK</span>
+                    <span class="ind-severity" id="indDomainSeverity">--</span>
+                  </div>
+                  <div class="ind-body">
+                    <div class="ind-val mono" id="indDomainName">--</div>
+                    <div class="ind-desc" id="indDomainDesc">--</div>
+                  </div>
+                </div>
+
+                <div class="indicator-card mt-16">
+                  <div class="ind-header">
+                    <span class="ind-title">RELAY COMPLEXITY</span>
+                    <span class="ind-severity" id="indRelaySeverity">--</span>
+                  </div>
+                  <div class="ind-body">
+                    <div class="ind-val" id="indRelayCount">--</div>
+                    <div class="ind-desc" id="indRelayDesc">--</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              AI FORENSIC ANALYSIS
+              <span class="sub-badge">Powered by Amazon Bedrock · Nova Micro 1.0</span>
+            </div>
+            <div class="panel-body">
+              <div id="aiAnalysisEmpty" class="empty-state">AI analysis will appear after artifact ingestion.</div>
+              <div id="aiAnalysisContent" class="hidden">
+                <div class="ai-assessment">
+                  <div class="ai-label">ASSESSMENT</div>
+                  <p id="threatText" class="mt-8">--</p>
+                </div>
+                <div class="ai-observations mt-16">
+                  <div class="ai-label">KEY OBSERVATIONS</div>
+                  <ul id="aiObservationsList" class="obs-list mt-8"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 4: MTA Traversal Ledger -->
+        <div class="panel mt-16">
+          <div class="panel-header">
+            MTA TRAVERSAL
+            <span class="header-subtitle" id="mtaSubtitle">--</span>
+          </div>
+          <div class="panel-body p-0">
+            <div id="mtaEmpty" class="empty-state p-16">No Received headers parsed</div>
+            <div class="table-container hidden" id="mtaTableContainer">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>HOP</th>
+                    <th>TIMESTAMP</th>
+                    <th>IP ADDRESS</th>
+                    <th>REVERSE DNS</th>
+                    <th>ASN</th>
+                    <th>GEO-ORIGIN</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody id="hopTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 5: Evidence Integrity -->
+        <div class="panel mt-16 mb-32">
+          <div class="panel-header">EVIDENCE INTEGRITY</div>
+          <div class="panel-body">
+            <div class="evidence-grid">
+              <div class="ev-item">
+                <span class="ev-label">SHA-256</span>
+                <span class="ev-status pass">VERIFIED</span>
+                <code class="ev-val" id="evSha">--</code>
+              </div>
+              <div class="ev-item">
+                <span class="ev-label">Original Artifact</span>
+                <span class="ev-status pass">PRESERVED</span>
+                <span class="ev-val" id="evFilename">--</span>
+              </div>
+              <div class="ev-item">
+                <span class="ev-label">Processing Log</span>
+                <span class="ev-status pass">RECORDED</span>
+                <span class="ev-val" id="evTimestamp">--</span>
+              </div>
+              <div class="ev-item">
+                <span class="ev-label">Parser Version</span>
+                <span class="ev-val">PhantomTrace v1.2</span>
+              </div>
+            </div>
+            <div class="evidence-actions mt-16">
+              <button class="btn-secondary">View Hash</button>
+              <button class="btn-secondary">View Processing Log</button>
+              <button class="btn-secondary" onclick="downloadCertificate()">Generate Evidence Certificate</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== EVIDENCE TAB ==================== -->
+    <div id="view-evidence" class="tab-view hidden panel mt-16">
+      <div class="panel-header">EVIDENCE VAULT</div>
+      <div class="panel-body text-center p-48">
+         <i class="fa-solid fa-server mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
+         <p style="color: var(--text-secondary); font-weight: 500;">Immutable Amazon S3 Connection Established.</p>
+         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Run an analysis in the main tab to log artifacts to the Section 65B vault.</p>
+      </div>
+    </div>
+
+    <!-- ==================== THREAT INTEL TAB ==================== -->
+    <div id="view-intel" class="tab-view hidden panel mt-16">
+      <div class="panel-header">THREAT INTELLIGENCE</div>
+      <div class="panel-body text-center p-48">
+         <i class="fa-solid fa-satellite-dish mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
+         <p style="color: var(--text-secondary); font-weight: 500;">MaxMind GeoIP & DNS Subsystems Active.</p>
+         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Awaiting IOCs from email ingestion.</p>
+      </div>
+    </div>
+
+    <!-- ==================== REPORTS TAB ==================== -->
+    <div id="view-reports" class="tab-view hidden panel mt-16">
+      <div class="panel-header">FORENSIC REPORTS</div>
+      <div class="panel-body text-center p-48">
+         <i class="fa-solid fa-file-pdf mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
+         <p style="color: var(--text-secondary); font-weight: 500;">DynamoDB Ledger Synchronized.</p>
+         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">No reports have been generated in this session.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
