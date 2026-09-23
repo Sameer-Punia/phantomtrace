@@ -6,17 +6,27 @@ from forensic_engine import analyze_email
 
 app = FastAPI(title="PhantomTrace Forensic Engine", version="1.0.0")
 
-# Serve UI and generated local report files
-os.makedirs("static", exist_ok=True)
-os.makedirs("reports", exist_ok=True)
+# Compute base project root directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/reports", StaticFiles(directory="reports"), name="reports")
+# Configure directories for local vs Vercel serverless environments
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+REPORTS_DIR = "/tmp/reports" if os.environ.get("VERCEL") else os.path.join(BASE_DIR, "reports")
+
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+# Mount static and dynamic report assets
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
 
 @app.get("/")
 async def serve_index():
-    return FileResponse("static/index.html")
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if not os.path.exists(index_file):
+        raise HTTPException(status_code=404, detail="Frontend interface not found.")
+    return FileResponse(index_file)
 
 
 @app.post("/analyze")

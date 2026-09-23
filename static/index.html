@@ -13,10 +13,11 @@
   <!-- Top Navigation -->
   <header class="navbar">
     <div class="brand">
+      <i class="fa-solid fa-shield-halved brand-icon"></i>
       <span class="brand-title">PHANTOMTRACE</span>
+      <span class="sub-badge" style="margin-left: 8px;">DFIR v1.2</span>
     </div>
     <div class="nav-center">
-      <!-- Fixed Navigation Links -->
       <nav class="nav-links">
         <a href="javascript:void(0);" class="nav-tab active" onclick="switchTab('view-analysis', this)">Analysis</a>
         <a href="javascript:void(0);" class="nav-tab" onclick="switchTab('view-evidence', this)">Evidence Vault</a>
@@ -26,16 +27,16 @@
     </div>
     <div class="nav-right">
       <span class="engine-status">
-        ENGINE STATUS: 
+        ENGINE: 
         <span class="status-dot"></span>Parser 
         <span class="status-dot"></span>DNS 
         <span class="status-dot"></span>GeoIP 
-        <span class="status-dot"></span>AI
+        <span class="status-dot"></span>Nova AI
       </span>
       <button class="btn-primary" onclick="document.getElementById('emlUpload').click()">
-        New Analysis
+        <i class="fa-solid fa-plus mr-4"></i> New Analysis
       </button>
-      <input type="file" id="emlUpload" accept=".eml" onchange="fileSelected()" style="display: none;" />
+      <input type="file" id="emlUpload" accept=".eml,.msg,.txt" onchange="fileSelected()" style="display: none;" />
     </div>
   </header>
 
@@ -44,27 +45,35 @@
     <!-- ==================== ANALYSIS TAB ==================== -->
     <div id="view-analysis" class="tab-view">
       
-      <!-- State A: Empty / Ingestion (Hidden when artifact loaded) -->
+      <!-- State A: Empty / Ingestion -->
       <div id="stateEmpty" class="ingestion-state">
-        <div class="drop-zone" onclick="document.getElementById('emlUpload').click()">
+        <div class="drop-zone" onclick="document.getElementById('emlUpload').click()" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
           <i class="fa-solid fa-file-arrow-up drop-icon"></i>
           <h2>DROP EMAIL ARTIFACT</h2>
-          <p>Drag & drop .eml file here or browse</p>
+          <p>Drag & drop raw .eml file here or browse filesystem</p>
         </div>
-        <p class="ingestion-desc">PhantomTrace extracts authentication, routing, sender identity, network infrastructure, and evidence-integrity metadata.</p>
+        <p class="ingestion-desc">PhantomTrace parses RFC-5322 headers, extracts true originating clients, validates root DNSSEC/SPF/DKIM/DMARC telemetry, queries MaxMind GeoIP, and synthesizes threat attribution via Amazon Bedrock.</p>
         
         <div class="module-cards">
-          <div class="module-card">SPF / DKIM / DMARC</div>
-          <div class="module-card">Header Analysis</div>
-          <div class="module-card">DNS / GeoIP</div>
-          <div class="module-card">Threat Intel</div>
+          <div class="module-card"><i class="fa-solid fa-fingerprint"></i> SPF / DKIM / DMARC</div>
+          <div class="module-card"><i class="fa-solid fa-network-wired"></i> MTA Route Traversal</div>
+          <div class="module-card"><i class="fa-solid fa-location-crosshairs"></i> MaxMind GeoIP</div>
+          <div class="module-card"><i class="fa-solid fa-brain"></i> Bedrock Nova Reasoning</div>
+          <div class="module-card"><i class="fa-solid fa-certificate"></i> Section 65B Preserved</div>
         </div>
       </div>
 
-      <!-- State B: Analyzed Dashboard (Hidden initially) -->
+      <!-- State Loading Overlay -->
+      <div id="analysisLoader" class="loading-overlay hidden text-center p-48">
+        <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 42px; color: var(--accent-primary, #0284c7);"></i>
+        <h3 class="mt-16" style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">RECONSTRUCTING FORENSIC CHAIN...</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 6px;">Querying Public Nameservers · Extracting Sockets · Synthesizing Nova Micro Reasoning</p>
+      </div>
+
+      <!-- State B: Analyzed Dashboard -->
       <div id="stateAnalyzed" class="analyzed-state hidden">
         
-        <!-- Top Summary -->
+        <!-- Top Summary / Threat Banner -->
         <section class="panel threat-banner">
           <div class="threat-score-col">
             <div class="score-value" id="threatScoreVal">--</div>
@@ -75,16 +84,20 @@
               <span class="meta-item">Artifact: <code id="metaFilename">--</code></span>
               <span class="meta-item">Time: <code id="metaTimestamp">--</code></span>
               <span class="meta-item">SHA-256: <code id="metaSha">--</code></span>
-              <span class="meta-item">Status: <span class="status-tag">ANALYSIS COMPLETE</span></span>
+              <span class="meta-item">Integrity: <span class="status-tag">IMMUTABLE (SEC 65B)</span></span>
             </div>
             <div class="threat-factors">
-              <h4>Why this score?</h4>
+              <h4>Forensic Attribution & Anomaly Vectors</h4>
               <div class="factors-list" id="factorsList"></div>
             </div>
           </div>
           <div class="banner-actions">
-            <button class="btn-action" id="btnExportReport" onclick="downloadCertificate()">Export Forensic Report</button>
-            <button class="btn-action" id="btnExportJson" onclick="exportJson()">Export JSON</button>
+            <button class="btn-action" id="btnExportReport" onclick="downloadCertificate()">
+              <i class="fa-solid fa-file-pdf mr-4"></i> Export PDF Certificate
+            </button>
+            <button class="btn-action" id="btnExportJson" onclick="exportJson()">
+              <i class="fa-solid fa-code mr-4"></i> Export JSON
+            </button>
           </div>
         </section>
 
@@ -95,7 +108,7 @@
             <div class="panel-body">
               <div class="identity-grid">
                 <div class="id-row">
-                  <span class="id-label">From:</span>
+                  <span class="id-label">From Header:</span>
                   <span class="id-val mono" id="valFrom">--</span>
                 </div>
                 <div class="id-row">
@@ -103,23 +116,23 @@
                   <span class="id-val mono" id="valReturnPath">--</span>
                 </div>
                 <div class="id-row">
-                  <span class="id-label">Alignment:</span>
+                  <span class="id-label">Domain Alignment:</span>
                   <span class="id-val" id="valAlignment">--</span>
                 </div>
               </div>
 
-              <h4 class="section-title mt-16">Authentication Status</h4>
+              <h4 class="section-title mt-16">Cryptographic Telemetry</h4>
               <div class="auth-status-grid">
                 <div class="auth-item" id="authSpf">
-                  <div class="auth-name">SPF</div>
+                  <div class="auth-name">SPF VALIDATION</div>
                   <div class="auth-result" id="resSpf">--</div>
                 </div>
                 <div class="auth-item" id="authDkim">
-                  <div class="auth-name">DKIM</div>
+                  <div class="auth-name">DKIM SIGNATURE</div>
                   <div class="auth-result" id="resDkim">--</div>
                 </div>
                 <div class="auth-item" id="authDmarc">
-                  <div class="auth-name">DMARC</div>
+                  <div class="auth-name">DMARC POLICY</div>
                   <div class="auth-result" id="resDmarc">--</div>
                 </div>
               </div>
@@ -127,19 +140,23 @@
           </div>
 
           <div class="panel">
-            <div class="panel-header">NETWORK ORIGIN & TRAVERSAL</div>
+            <div class="panel-header">
+              NETWORK ORIGIN & TRAVERSAL
+              <span id="originTypeTag" class="status-tag" style="float: right;">INSPECTING</span>
+            </div>
             <div class="panel-body p-0">
                <div class="network-meta p-16">
-                  <div class="net-row"><span class="net-label">Origin IP:</span> <code id="netOriginIp">--</code></div>
-                  <div class="net-row"><span class="net-label">Location:</span> <span id="netLocation">--</span></div>
-                  <div class="net-row"><span class="net-label">Reverse DNS:</span> <code id="netPtr">--</code></div>
+                  <div class="net-row"><span class="net-label">Candidate Origin IP:</span> <code id="netOriginIp">--</code></div>
+                  <div class="net-row"><span class="net-label">Physical Location:</span> <span id="netLocation">--</span></div>
+                  <div class="net-row"><span class="net-label">Reverse DNS (PTR):</span> <code id="netPtr">--</code></div>
+                  <div class="net-row"><span class="net-label">Header Evidence Source:</span> <span id="netHeaderSrc" class="mono" style="font-size: 11px; color: var(--text-secondary);">--</span></div>
                </div>
                <div id="map" class="compact-map"></div>
             </div>
           </div>
         </div>
 
-        <!-- Row 3: Threat Indicators & AI Synthesis -->
+        <!-- Row 3: Threat Indicators & AI Reasoning -->
         <div class="grid-two-col mt-16">
           <div class="panel">
             <div class="panel-header">THREAT INDICATORS</div>
@@ -149,7 +166,7 @@
                 
                 <div class="indicator-card">
                   <div class="ind-header">
-                    <span class="ind-title">DOMAIN RISK</span>
+                    <span class="ind-title">AUTHENTICATION & ALIGNMENT RISK</span>
                     <span class="ind-severity" id="indDomainSeverity">--</span>
                   </div>
                   <div class="ind-body">
@@ -160,7 +177,7 @@
 
                 <div class="indicator-card mt-16">
                   <div class="ind-header">
-                    <span class="ind-title">RELAY COMPLEXITY</span>
+                    <span class="ind-title">RELAY TRAVERSAL ANOMALIES</span>
                     <span class="ind-severity" id="indRelaySeverity">--</span>
                   </div>
                   <div class="ind-body">
@@ -175,18 +192,18 @@
 
           <div class="panel">
             <div class="panel-header">
-              AI FORENSIC ANALYSIS
-              <span class="sub-badge">Powered by Amazon Bedrock · Nova Micro 1.0</span>
+              AI FORENSIC REASONING
+              <span class="sub-badge">Amazon Bedrock · Nova Micro</span>
             </div>
             <div class="panel-body">
-              <div id="aiAnalysisEmpty" class="empty-state">AI analysis will appear after artifact ingestion.</div>
+              <div id="aiAnalysisEmpty" class="empty-state">L3 SOC reasoning will synthesize automatically post-ingestion.</div>
               <div id="aiAnalysisContent" class="hidden">
                 <div class="ai-assessment">
-                  <div class="ai-label">ASSESSMENT</div>
-                  <p id="threatText" class="mt-8">--</p>
+                  <div class="ai-label">ADMISSIBILITY & ATTRIBUTION VERDICT</div>
+                  <p id="threatText" class="mt-8" style="line-height: 1.6; font-size: 13px;">--</p>
                 </div>
                 <div class="ai-observations mt-16">
-                  <div class="ai-label">KEY OBSERVATIONS</div>
+                  <div class="ai-label">INVESTIGATOR TAKEAWAYS</div>
                   <ul id="aiObservationsList" class="obs-list mt-8"></ul>
                 </div>
               </div>
@@ -197,8 +214,8 @@
         <!-- Row 4: MTA Traversal Ledger -->
         <div class="panel mt-16">
           <div class="panel-header">
-            MTA TRAVERSAL
-            <span class="header-subtitle" id="mtaSubtitle">--</span>
+            MTA RELAY TRAVERSAL LEDGER
+            <span class="header-subtitle" id="mtaSubtitle">Chronological Hops</span>
           </div>
           <div class="panel-body p-0">
             <div id="mtaEmpty" class="empty-state p-16">No Received headers parsed</div>
@@ -206,13 +223,11 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>HOP</th>
-                    <th>TIMESTAMP</th>
+                    <th>HOP #</th>
                     <th>IP ADDRESS</th>
-                    <th>REVERSE DNS</th>
-                    <th>ASN</th>
-                    <th>GEO-ORIGIN</th>
-                    <th>STATUS</th>
+                    <th>REVERSE DNS (PTR)</th>
+                    <th>GEOLOCATION</th>
+                    <th>COORDINATES</th>
                   </tr>
                 </thead>
                 <tbody id="hopTableBody"></tbody>
@@ -223,33 +238,33 @@
 
         <!-- Row 5: Evidence Integrity -->
         <div class="panel mt-16 mb-32">
-          <div class="panel-header">EVIDENCE INTEGRITY</div>
+          <div class="panel-header">CHAIN OF CUSTODY & EVIDENCE INTEGRITY</div>
           <div class="panel-body">
             <div class="evidence-grid">
               <div class="ev-item">
-                <span class="ev-label">SHA-256</span>
-                <span class="ev-status pass">VERIFIED</span>
+                <span class="ev-label">SHA-256 Digest</span>
+                <span class="ev-status pass">CRYPTOGRAPHICALLY VERIFIED</span>
                 <code class="ev-val" id="evSha">--</code>
               </div>
               <div class="ev-item">
-                <span class="ev-label">Original Artifact</span>
-                <span class="ev-status pass">PRESERVED</span>
+                <span class="ev-label">Preserved Artifact</span>
+                <span class="ev-status pass">RFC-5322 INTACT</span>
                 <span class="ev-val" id="evFilename">--</span>
               </div>
               <div class="ev-item">
-                <span class="ev-label">Processing Log</span>
-                <span class="ev-status pass">RECORDED</span>
+                <span class="ev-label">Processing Timestamp</span>
+                <span class="ev-status pass">UTC RECORDED</span>
                 <span class="ev-val" id="evTimestamp">--</span>
               </div>
               <div class="ev-item">
-                <span class="ev-label">Parser Version</span>
-                <span class="ev-val">PhantomTrace v1.2</span>
+                <span class="ev-label">Compliance Protocol</span>
+                <span class="ev-val">Indian Evidence Act · Sec 65B</span>
               </div>
             </div>
             <div class="evidence-actions mt-16">
-              <button class="btn-secondary">View Hash</button>
-              <button class="btn-secondary">View Processing Log</button>
-              <button class="btn-secondary" onclick="downloadCertificate()">Generate Evidence Certificate</button>
+              <button class="btn-secondary" onclick="showHashModal()"><i class="fa-solid fa-hashtag mr-4"></i> View Full Hash</button>
+              <button class="btn-secondary" onclick="showLogModal()"><i class="fa-solid fa-terminal mr-4"></i> View Processing Log</button>
+              <button class="btn-secondary" onclick="downloadCertificate()"><i class="fa-solid fa-file-shield mr-4"></i> Download Signed Certificate</button>
             </div>
           </div>
         </div>
@@ -257,33 +272,48 @@
       </div>
     </div>
 
-    <!-- ==================== EVIDENCE TAB ==================== -->
+    <!-- ==================== EVIDENCE VAULT TAB ==================== -->
     <div id="view-evidence" class="tab-view hidden panel mt-16">
-      <div class="panel-header">EVIDENCE VAULT</div>
-      <div class="panel-body text-center p-48">
-         <i class="fa-solid fa-server mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
-         <p style="color: var(--text-secondary); font-weight: 500;">Immutable Amazon S3 Connection Established.</p>
-         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Run an analysis in the main tab to log artifacts to the Section 65B vault.</p>
+      <div class="panel-header">IMMUTABLE EVIDENCE VAULT (AMAZON S3)</div>
+      <div class="panel-body p-24">
+         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+            <div>
+              <h4 style="color: var(--text-primary);">Section 65B Cryptographic Vault</h4>
+              <p style="color: var(--text-secondary); font-size: 12px;">Active S3 Bucket: <code>phantomtrace-evidence-vault-samee</code></p>
+            </div>
+            <span class="status-tag">AES-256 S3 MANAGED</span>
+         </div>
+         <div id="evidenceVaultList" class="mt-16">
+           <p style="color: var(--text-muted); font-size: 13px;">Execute an analysis in the main workspace to generate an immutable forensic record.</p>
+         </div>
       </div>
     </div>
 
     <!-- ==================== THREAT INTEL TAB ==================== -->
     <div id="view-intel" class="tab-view hidden panel mt-16">
-      <div class="panel-header">THREAT INTELLIGENCE</div>
-      <div class="panel-body text-center p-48">
-         <i class="fa-solid fa-satellite-dish mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
-         <p style="color: var(--text-secondary); font-weight: 500;">MaxMind GeoIP & DNS Subsystems Active.</p>
-         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Awaiting IOCs from email ingestion.</p>
+      <div class="panel-header">ACTIVE THREAT INTELLIGENCE FEED</div>
+      <div class="panel-body p-24">
+         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+           <div class="panel p-16">
+              <h4 style="color: var(--text-primary);"><i class="fa-solid fa-server mr-8"></i>MaxMind GeoIP Database</h4>
+              <p style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">Autonomous City MMDB binary loaded locally. Zero external telemetry emitted during attribution.</p>
+           </div>
+           <div class="panel p-16">
+              <h4 style="color: var(--text-primary);"><i class="fa-solid fa-shield-virus mr-8"></i>Known Spoof Vectors</h4>
+              <p style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">Automated inspection of consumer cloud relays (Google AS15169, Microsoft AS8075) versus dedicated direct MTAs.</p>
+           </div>
+         </div>
       </div>
     </div>
 
     <!-- ==================== REPORTS TAB ==================== -->
     <div id="view-reports" class="tab-view hidden panel mt-16">
-      <div class="panel-header">FORENSIC REPORTS</div>
-      <div class="panel-body text-center p-48">
-         <i class="fa-solid fa-file-pdf mb-16" style="font-size: 36px; color: var(--text-muted);"></i>
-         <p style="color: var(--text-secondary); font-weight: 500;">DynamoDB Ledger Synchronized.</p>
-         <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">No reports have been generated in this session.</p>
+      <div class="panel-header">PERSISTED FORENSIC CERTIFICATES (DYNAMODB)</div>
+      <div class="panel-body p-24">
+         <p style="color: var(--text-secondary); font-size: 13px;">Audit trail records committed to DynamoDB table <code>phantomtrace_audits</code> with presigned download links.</p>
+         <div id="reportsTablePlaceholder" class="mt-16">
+           <p style="color: var(--text-muted); font-size: 12px;">No historical sessions recorded in this browser cycle.</p>
+         </div>
       </div>
     </div>
 
